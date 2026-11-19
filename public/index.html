@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Jelajah Nusantara</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+
+    <!-- LOBI -->
+    <section id="lobby" class="screen">
+      <div class="logo">&#129517;</div>
+      <h1>Jelajah Nusantara</h1>
+      <p class="sub">Game co-op untuk 2 pemain. Kumpulkan 8 artefak yang hilang di seluruh Indonesia. Tiap pemain hanya memegang separuh petunjuk, jadi kalian harus saling bertanya.</p>
+
+      <label for="name">Nama kamu</label>
+      <input id="name" maxlength="16" placeholder="contoh: Rafi" autocomplete="off">
+
+      <button id="btnCreate" class="btn primary">Buat Ruangan</button>
+
+      <div class="or">atau gabung ke ruangan teman</div>
+
+      <div class="row">
+        <input id="code" maxlength="4" placeholder="KODE" autocomplete="off" autocapitalize="characters">
+        <button id="btnJoin" class="btn">Gabung</button>
+      </div>
+
+      <p id="lobbyError" class="error" hidden></p>
+    </section>
+
+    <!-- MENUNGGU PEMAIN 2 -->
+    <section id="waiting" class="screen" hidden>
+      <h2>Menunggu pemain kedua...</h2>
+      <p class="sub">Suruh temanmu membuka alamat game ini di browser, lalu masukkan kode:</p>
+      <div id="roomCode" class="bigcode">----</div>
+      <button id="btnCopy" class="btn">Salin kode</button>
+      <p class="hint">Game dimulai otomatis begitu pemain kedua masuk.</p>
+    </section>
+
+    <!-- BERMAIN -->
+    <section id="play" class="screen" hidden>
+      <header class="topbar">
+        <div class="progress">
+          <span id="stageLabel">Pulau 1/8</span>
+          <div class="bar"><div id="barFill"></div></div>
+        </div>
+        <div id="hearts" class="hearts" aria-label="Nyawa"></div>
+      </header>
+
+      <div class="island">
+        <div id="pulau" class="pulau">Sumatra</div>
+        <h2 id="stageName"></h2>
+        <p id="intro" class="sub"></p>
+      </div>
+
+      <div id="result" class="result" hidden></div>
+
+      <div class="card clue">
+        <div class="role" id="role"></div>
+        <p id="clue"></p>
+        <small>Hanya kamu yang bisa melihat petunjuk ini. Ceritakan ke temanmu lewat chat.</small>
+      </div>
+
+      <div class="card">
+        <h3 id="question"></h3>
+        <div id="options" class="options"></div>
+        <p id="pickStatus" class="hint"></p>
+      </div>
+
+      <div class="card chat">
+        <div id="chatLog" class="chatlog"></div>
+        <form id="chatForm" class="row">
+          <input id="chatInput" maxlength="200" placeholder="Ketik pesan ke temanmu..." autocomplete="off">
+          <button class="btn" type="submit">Kirim</button>
+        </form>
+      </div>
+
+      <p id="conn" class="hint"></p>
+    </section>
+
+    <!-- AKHIR -->
+    <section id="end" class="screen" hidden>
+      <div id="endIcon" class="logo">&#127942;</div>
+      <h2 id="endTitle"></h2>
+      <p id="endText" class="sub"></p>
+      <div id="collection" class="collection"></div>
+      <button id="btnRestart" class="btn primary">Main Lagi</button>
+    </section>
+
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

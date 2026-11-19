@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: jelajah-nusantara
+    runtime: node
+    plan: free
+    buildCommand: echo "tidak ada dependency"
+    startCommand: node server.js
