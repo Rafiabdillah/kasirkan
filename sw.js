@@ -1,4 +1,4 @@
-var CACHE = 'hitungusaha-v1';
+var CACHE = 'hitungusaha-v3';
 var FILES = ['./', './index.html', './style.css', './app.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', function (e) {
@@ -13,15 +13,56 @@ self.addEventListener('activate', function (e) {
   self.clients.claim();
 });
 
+function isAsset(url) {
+  return /\.(?:js|css|svg|png|jpg|jpeg|webp|woff2?|ttf)(?:$|\?)/i.test(url.pathname);
+}
+
 self.addEventListener('fetch', function (e) {
-  if (e.request.method !== 'GET') return;
+  var req = e.request;
+  if (req.method !== 'GET') return;
+  var url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then(function (res) {
+        var copy = res.clone();
+        caches.open(CACHE).then(function (c) { c.put('./index.html', copy); });
+        return res;
+      }).catch(function () {
+        return caches.match('./index.html').then(function (m) {
+          return m || new Response('', { status: 503, statusText: 'Offline' });
+        });
+      })
+    );
+    return;
+  }
+
+  if (isAsset(url)) {
+    e.respondWith(
+      caches.match(req).then(function (cached) {
+        var network = fetch(req).then(function (res) {
+          if (res && res.ok) {
+            var copy = res.clone();
+            caches.open(CACHE).then(function (c) { c.put(req, copy); });
+          }
+          return res;
+        }).catch(function () { return cached; });
+        return cached || network;
+      })
+    );
+    return;
+  }
+
   e.respondWith(
-    fetch(e.request).then(function (res) {
+    fetch(req).then(function (res) {
       var copy = res.clone();
-      caches.open(CACHE).then(function (c) { c.put(e.request, copy); });
+      caches.open(CACHE).then(function (c) { c.put(req, copy); });
       return res;
     }).catch(function () {
-      return caches.match(e.request).then(function (m) { return m || caches.match('./index.html'); });
+      return caches.match(req).then(function (m) {
+        return m || new Response('', { status: 503, statusText: 'Offline' });
+      });
     })
   );
 });
