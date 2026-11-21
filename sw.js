@@ -1,4 +1,4 @@
-var CACHE = 'hitungusaha-v3';
+var CACHE = 'hitungusaha-v4';
 var FILES = ['./', './index.html', './style.css', './app.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', function (e) {
