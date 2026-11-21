@@ -21,7 +21,7 @@ function extract(name) {
   return src.slice(idx, i);
 }
 
-const NEED = ['pad','today','monthOf','uid','num','esc','rp','pct','findBy','prodName','sumTx','paid','remain','txSorted','monthLabel','monthShift','csvCell','applyStock','load','save'];
+const NEED = ['pad','today','monthOf','uid','num','esc','sanitizeStr','cleanId','requiredId','sanitizeDate','rp','pct','findBy','prodName','sumTx','paid','remain','txSorted','monthLabel','monthShift','csvCell','applyStock','load','save'];
 const funcs = NEED.map(extract).join('\n');
 
 const PRELUDE = `
@@ -31,7 +31,7 @@ var Q = String.fromCharCode(34);
 var db = { settings:{name:''}, products:[], tx:[], debts:[] };
 function toast(){};
 `;
-const EXPORTS = '{pad,today,monthOf,uid,num,esc,rp,pct,findBy,prodName,sumTx,paid,remain,txSorted,monthLabel,monthShift,csvCell,applyStock,load,save,getDb:function(){return db;},setDb:function(x){db=x;}}';
+const EXPORTS = '{pad,today,monthOf,uid,num,esc,sanitizeStr,cleanId,requiredId,sanitizeDate,rp,pct,findBy,prodName,sumTx,paid,remain,txSorted,monthLabel,monthShift,csvCell,applyStock,load,save,getDb:function(){return db;},setDb:function(x){db=x;}}';
 
 function makeCtx(store) {
   const ls = {

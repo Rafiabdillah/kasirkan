@@ -18,12 +18,20 @@ function load() {
   try {
     var r = localStorage.getItem(KEY);
     if (r) {
-      var d = JSON.parse(r);
-      d.settings = d.settings || { name: '' };
-      d.products = d.products || [];
-      d.tx = d.tx || [];
-      d.debts = d.debts || [];
-      return d;
+      var d = JSON.parse(r) || {};
+      return {
+        settings: (d.settings && typeof d.settings === 'object') ? { name: sanitizeStr(d.settings.name) } : { name: '' },
+        products: Array.isArray(d.products) ? d.products.map(function (p) {
+          return { id: requiredId(p && p.id), name: sanitizeStr(p && p.name), cost: num(p && p.cost), price: num(p && p.price), stock: num(p && p.stock), minStock: num(p && p.minStock) };
+        }) : [],
+        tx: Array.isArray(d.tx) ? d.tx.map(function (t) {
+          return { id: requiredId(t && t.id), type: (t && t.type === 'out') ? 'out' : 'in', date: sanitizeDate(t && t.date, today()), amount: num(t && t.amount), category: sanitizeStr(t && t.category), note: sanitizeStr(t && t.note), productId: cleanId(t && t.productId), qty: num(t && t.qty), debtId: cleanId(t && t.debtId), debtKind: (t && t.debtKind === 'hutang') ? 'hutang' : 'piutang' };
+        }) : [],
+        debts: Array.isArray(d.debts) ? d.debts.map(function (dbItem) {
+          var pays = Array.isArray(dbItem && dbItem.payments) ? dbItem.payments : [];
+          return { id: requiredId(dbItem && dbItem.id), kind: (dbItem && dbItem.kind === 'hutang') ? 'hutang' : 'piutang', party: sanitizeStr(dbItem && dbItem.party), phone: sanitizeStr(dbItem && dbItem.phone), total: num(dbItem && dbItem.total), date: sanitizeDate(dbItem && dbItem.date, today()), due: sanitizeDate(dbItem && dbItem.due, ''), note: sanitizeStr(dbItem && dbItem.note), payments: pays.map(function (pm) { return { date: sanitizeDate(pm && pm.date, today()), amount: num(pm && pm.amount) }; }) };
+        }) : []
+      };
     }
   } catch (e) {}
   return { settings: { name: '' }, products: [], tx: [], debts: [] };
@@ -64,6 +72,10 @@ function num(v) {
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;').split(Q).join('&quot;');
 }
+function sanitizeStr(v) { return String(v == null ? '' : v).slice(0, 500); }
+function cleanId(v) { return String(v == null ? '' : v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); }
+function requiredId(v) { return cleanId(v) || uid(); }
+function sanitizeDate(v, fallback) { var s = String(v == null ? '' : v); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : (fallback || ''); }
 function rp(n) {
   n = Math.round(Number(n) || 0);
   return (n < 0 ? '-' : '') + 'Rp ' + new Intl.NumberFormat('id-ID').format(Math.abs(n));
@@ -190,7 +202,7 @@ function viewBeranda() {
   }
   if (low.length) {
     h += `<div class='sectionhead'><h2>Stok menipis</h2></div><div class='list'>` + low.map(function (p) {
-      return `<div class='item'><div class='main'><b>${esc(p.name)}</b><small>Batas minimum ${p.minStock}</small></div><div class='side'><span class='badge ${p.stock <= 0 ? 'bad' : 'warn'}'>Stok ${p.stock}</span></div></div>`;
+      return `<div class='item'><div class='main'><b>${esc(p.name)}</b><small>Batas minimum ${esc(p.minStock)}</small></div><div class='side'><span class='badge ${p.stock <= 0 ? 'bad' : 'warn'}'>Stok ${esc(p.stock)}</span></div></div>`;
     }).join('') + `</div>`;
   }
   var recent = txSorted().slice(0, 5);
@@ -202,7 +214,9 @@ function viewBeranda() {
 // ---------- Transaksi ----------
 function txItem(t) {
   var pn = prodName(t.productId);
-  return `<div class='item'><div class='main'><b>${esc(t.category)}${pn ? ' - ' + esc(pn) : ''}</b><small>${t.date}${t.qty ? ' | ' + t.qty + ' pcs' : ''}${t.note ? ' | ' + esc(t.note) : ''}</small></div><div class='side'><b class='${t.type}'>${t.type === 'in' ? '+' : '-'}${rp(t.amount)}</b><div class='actions'><button class='btn small' data-act='tx-edit' data-id='${t.id}'>Ubah</button><button class='btn small danger' data-act='tx-del' data-id='${t.id}'>Hapus</button></div></div></div>`;
+  var tt = t.type === 'out' ? 'out' : 'in';
+  var qn = num(t.qty);
+  return `<div class='item'><div class='main'><b>${esc(t.category)}${pn ? ' - ' + esc(pn) : ''}</b><small>${esc(t.date)}${qn ? ' | ' + qn + ' pcs' : ''}${t.note ? ' | ' + esc(t.note) : ''}</small></div><div class='side'><b class='${tt}'>${tt === 'in' ? '+' : '-'}${rp(t.amount)}</b><div class='actions'><button class='btn small' data-act='tx-edit' data-id='${esc(t.id)}'>Ubah</button><button class='btn small danger' data-act='tx-del' data-id='${esc(t.id)}'>Hapus</button></div></div></div>`;
 }
 function viewTransaksi() {
   var q = String(filter.qTx || '').trim().toLowerCase();
@@ -213,7 +227,7 @@ function viewTransaksi() {
     var hay = [t.category, t.note, prodName(t.productId), t.date].join(' ').toLowerCase();
     return hay.indexOf(q) !== -1;
   });
-  var h = `<div class='grid2'>${field('Bulan', `<input id='f_month' type='month' value='${filter.month}'>`)}${field('Cari transaksi', `<input id='f_qtx' value='${esc(filter.qTx)}' placeholder='kategori, produk, catatan'>`)}</div>`;
+  var h = `<div class='grid2'>${field('Bulan', `<input id='f_month' type='month' value='${esc(filter.month)}'>`)}${field('Cari transaksi', `<input id='f_qtx' value='${esc(filter.qTx)}' placeholder='kategori, produk, catatan'>`)}</div>`;
   h += `<div class='chips'>${chipBtn('f-type', 'all', 'Semua', filter.type === 'all')}${chipBtn('f-type', 'in', 'Pemasukan', filter.type === 'in')}${chipBtn('f-type', 'out', 'Pengeluaran', filter.type === 'out')}</div>`;
   h += `<div class='grid2'>${stat('Pemasukan', rp(sumTx(list, 'in')), 'good')}${stat('Pengeluaran', rp(sumTx(list, 'out')), 'bad')}</div>`;
   h += `<div class='sectionhead'><h2>${list.length} transaksi</h2><button class='btn primary small' data-act='tx-new'>+ Tambah</button></div>`;
@@ -235,11 +249,11 @@ function openTx(id, pre) {
 function renderTxForm(title) {
   var f = form, cats = f.type === 'in' ? CAT_IN : CAT_OUT;
   var prods = `<option value=''>Tanpa produk</option>` + db.products.map(function (p) {
-    return `<option value='${p.id}'${p.id === f.productId ? ' selected' : ''}>${esc(p.name)}</option>`;
+    return `<option value='${esc(p.id)}'${p.id === f.productId ? ' selected' : ''}>${esc(p.name)}</option>`;
   }).join('');
   var catOpts = cats.map(function (c) { return `<option${c === f.category ? ' selected' : ''}>${esc(c)}</option>`; }).join('');
   var h = `<div class='field'><div class='seg'><button type='button' class='${f.type === 'in' ? 'on in' : ''}' data-act='tx-type' data-v='in'>Pemasukan</button><button type='button' class='${f.type === 'out' ? 'on out' : ''}' data-act='tx-type' data-v='out'>Pengeluaran</button></div></div>`;
-  h += field('Tanggal', `<input id='f_date' type='date' value='${f.date}'>`);
+  h += field('Tanggal', `<input id='f_date' type='date' value='${esc(f.date)}'>`);
   if (db.products.length) {
     h += field('Produk (opsional)', `<select id='f_prod'>${prods}</select>`, f.type === 'in' ? 'Stok produk otomatis berkurang.' : 'Stok produk otomatis bertambah (restock).');
     h += field('Jumlah', numInput('f_qty', f.qty, 'contoh: 3'));
@@ -295,7 +309,7 @@ function viewProduk() {
   h += `<div class='list'>` + filtered.map(function (p) {
     var margin = p.price > 0 ? (p.price - p.cost) / p.price * 100 : 0;
     var badge = p.stock <= 0 ? `<span class='badge bad'>Habis</span>` : p.stock <= p.minStock ? `<span class='badge warn'>Menipis</span>` : `<span class='badge good'>Aman</span>`;
-    return `<div class='item'><div class='main'><b>${esc(p.name)}</b><small>Modal ${rp(p.cost)} | Jual ${rp(p.price)} | Margin ${pct(margin)}</small></div><div class='side'><b>Stok ${p.stock}</b>${badge}<div class='actions'><button class='btn small' data-act='prod-restock' data-id='${p.id}'>Restock</button><button class='btn small' data-act='prod-edit' data-id='${p.id}'>Ubah</button><button class='btn small danger' data-act='prod-del' data-id='${p.id}'>Hapus</button></div></div></div>`;
+    return `<div class='item'><div class='main'><b>${esc(p.name)}</b><small>Modal ${rp(p.cost)} | Jual ${rp(p.price)} | Margin ${pct(margin)}</small></div><div class='side'><b>Stok ${esc(p.stock)}</b>${badge}<div class='actions'><button class='btn small' data-act='prod-restock' data-id='${esc(p.id)}'>Restock</button><button class='btn small' data-act='prod-edit' data-id='${esc(p.id)}'>Ubah</button><button class='btn small danger' data-act='prod-del' data-id='${esc(p.id)}'>Hapus</button></div></div></div>`;
   }).join('') + `</div>`;
   return h;
 }
@@ -304,7 +318,7 @@ function openProd(id) {
   var h = field('Nama produk', `<input id='p_name' value='${esc(p ? p.name : '')}' placeholder='contoh: Paket sayur sop'>`);
   h += `<div class='grid2'>${field('Harga modal (Rp)', numInput('p_cost', p ? p.cost : ''))}${field('Harga jual (Rp)', numInput('p_price', p ? p.price : ''))}</div>`;
   h += `<div class='grid2'>${field('Stok sekarang', numInput('p_stock', p ? p.stock : ''))}${field('Batas stok minimum', numInput('p_min', p ? p.minStock : '', '5'))}</div>`;
-  h += `<button class='btn primary wide' data-act='prod-save' data-id='${p ? p.id : ''}'>Simpan</button>`;
+  h += `<button class='btn primary wide' data-act='prod-save' data-id='${esc(p ? p.id : '')}'>Simpan</button>`;
   openModal(p ? 'Ubah produk' : 'Tambah produk', h);
 }
 function saveProd(id) {
@@ -341,15 +355,15 @@ function viewHutang() {
     var copyBtn = '';
     if (d.kind === 'piutang' && r > 0) {
       var msg = 'Halo ' + d.party + ', mengingatkan sisa pembayaran ' + rp(r) + (db.settings.name ? ' ke ' + db.settings.name : '') + '. Terima kasih.';
-      copyBtn = `<button class='btn small' data-act='debt-copy' data-id='${d.id}'>Salin pesan</button>`;
+      copyBtn = `<button class='btn small' data-act='debt-copy' data-id='${esc(d.id)}'>Salin pesan</button>`;
       var ph = String(d.phone || '').replace(/[^0-9]/g, '');
       if (ph.charAt(0) === '0') ph = '62' + ph.slice(1);
       if (ph) {
-        wa = `<a class='btn small' target='_blank' rel='noopener' href='https://wa.me/${ph}?text=${encodeURIComponent(msg)}'>Tagih WA</a>`;
+        wa = `<a class='btn small' target='_blank' rel='noopener noreferrer' href='https://wa.me/${ph}?text=${encodeURIComponent(msg)}'>Tagih WA</a>`;
       }
     }
     var pays = (d.payments || []).length ? `<div class='subpay'>Riwayat bayar: ` + d.payments.map(function (pm) { return `<span>${esc(pm.date)}: ${rp(pm.amount)}</span>`; }).join('') + `</div>` : '';
-    return `<div class='item'><div class='main'><b>${esc(d.party)}</b><small>Sisa ${rp(r)} dari ${rp(d.total)}${d.due ? ' | Tempo ' + d.due : ''}${d.note ? ' | ' + esc(d.note) : ''}</small>${pays}</div><div class='side'>${badge}<div class='actions'><button class='btn small' data-act='debt-edit' data-id='${d.id}'>Ubah</button>${r > 0 ? `<button class='btn small' data-act='debt-pay' data-id='${d.id}'>${d.kind === 'piutang' ? 'Terima' : 'Bayar'}</button>` : ''}${copyBtn}${wa}<button class='btn small danger' data-act='debt-del' data-id='${d.id}'>Hapus</button></div></div></div>`;
+    return `<div class='item'><div class='main'><b>${esc(d.party)}</b><small>Sisa ${rp(r)} dari ${rp(d.total)}${d.due ? ' | Tempo ' + esc(d.due) : ''}${d.note ? ' | ' + esc(d.note) : ''}</small>${pays}</div><div class='side'>${badge}<div class='actions'><button class='btn small' data-act='debt-edit' data-id='${esc(d.id)}'>Ubah</button>${r > 0 ? `<button class='btn small' data-act='debt-pay' data-id='${esc(d.id)}'>${d.kind === 'piutang' ? 'Terima' : 'Bayar'}</button>` : ''}${copyBtn}${wa}<button class='btn small danger' data-act='debt-del' data-id='${esc(d.id)}'>Hapus</button></div></div></div>`;
   }).join('') + `</div>`;
   return h;
 }
@@ -362,7 +376,7 @@ function openDebt(id) {
   h += field('Jumlah (Rp)', numInput('d_total', d ? d.total : ''));
   h += `<div class='grid2'>${field('Tanggal', `<input id='d_date' type='date' value='${esc(d ? d.date : today())}'>`)}${field('Jatuh tempo', `<input id='d_due' type='date' value='${esc(d ? d.due || '' : '')}'>`)}</div>`;
   h += field('Catatan', `<input id='d_note' value='${esc(d ? d.note || '' : '')}' placeholder='opsional'>`);
-  h += `<button class='btn primary wide' data-act='debt-save' data-id='${d ? d.id : ''}'>Simpan</button>`;
+  h += `<button class='btn primary wide' data-act='debt-save' data-id='${esc(d ? d.id : '')}'>Simpan</button>`;
   openModal(d ? 'Ubah hutang / piutang' : 'Catat hutang / piutang', h);
 }
 function saveDebt(el) {
@@ -394,7 +408,7 @@ function openPay(id) {
   var h = `<p>${esc(d.party)} | sisa <b>${rp(remain(d))}</b></p>`;
   h += field('Jumlah dibayar (Rp)', numInput('y_amount', remain(d)));
   h += field('Tanggal', `<input id='y_date' type='date' value='${today()}'>`);
-  h += `<button class='btn primary wide' data-act='debt-paysave' data-id='${d.id}'>Simpan pembayaran</button>`;
+  h += `<button class='btn primary wide' data-act='debt-paysave' data-id='${esc(d.id)}'>Simpan pembayaran</button>`;
   openModal(d.kind === 'piutang' ? 'Terima pembayaran' : 'Bayar hutang', h);
 }
 function savePay(id) {
@@ -476,7 +490,7 @@ function viewLaporan() {
   var m = filter.month;
   var list = db.tx.filter(function (t) { return monthOf(t.date) === m; });
   var inn = sumTx(list, 'in'), out = sumTx(list, 'out'), laba = inn - out;
-  var h = `<div class='field noprint'><label>Bulan</label><input id='r_month' type='month' value='${m}'></div>`;
+  var h = `<div class='field noprint'><label>Bulan</label><input id='r_month' type='month' value='${esc(m)}'></div>`;
   h += `<div class='sectionhead'><h2>Laba rugi ${monthLabel(m)}</h2></div>`;
   h += `<div class='grid2'>${stat('Pemasukan', rp(inn), 'good')}${stat('Pengeluaran', rp(out), 'bad')}${stat(laba >= 0 ? 'Laba bersih' : 'Rugi bersih', rp(laba), laba >= 0 ? 'good' : 'bad')}${stat('Margin laba', inn > 0 ? pct(laba / inn * 100) : '-')}</div>`;
   var months = [];
@@ -678,10 +692,17 @@ document.addEventListener('change', function (e) {
         var d = JSON.parse(rd.result);
         if (!d || !Array.isArray(d.products) || !Array.isArray(d.tx) || !Array.isArray(d.debts)) throw new Error('format');
         if (!confirm('Pulihkan data dari cadangan? Data saat ini akan diganti.')) return;
-        d.settings = (d.settings && typeof d.settings === 'object') ? { name: String(d.settings.name || '') } : { name: '' };
-        d.products = d.products.map(function (p) { return Object.assign({}, p, { cost: num(p && p.cost), price: num(p && p.price), stock: num(p && p.stock), minStock: num(p && p.minStock) }); });
-        d.tx = d.tx.map(function (t) { return Object.assign({}, t, { amount: num(t && t.amount), qty: num(t && t.qty) }); });
-        d.debts = d.debts.map(function (dbItem) { return Object.assign({}, dbItem, { total: num(dbItem && dbItem.total), payments: Array.isArray(dbItem && dbItem.payments) ? dbItem.payments : [] }); });
+        d.settings = (d.settings && typeof d.settings === 'object') ? { name: sanitizeStr(d.settings.name) } : { name: '' };
+        d.products = d.products.map(function (p) {
+          return { id: requiredId(p && p.id), name: sanitizeStr(p && p.name), cost: num(p && p.cost), price: num(p && p.price), stock: num(p && p.stock), minStock: num(p && p.minStock) };
+        });
+        d.tx = d.tx.map(function (t) {
+          return { id: requiredId(t && t.id), type: (t && t.type === 'out') ? 'out' : 'in', date: sanitizeDate(t && t.date, today()), amount: num(t && t.amount), category: sanitizeStr(t && t.category), note: sanitizeStr(t && t.note), productId: cleanId(t && t.productId), qty: num(t && t.qty), debtId: cleanId(t && t.debtId), debtKind: (t && t.debtKind === 'hutang') ? 'hutang' : 'piutang' };
+        });
+        d.debts = d.debts.map(function (dbItem) {
+          var pays = Array.isArray(dbItem && dbItem.payments) ? dbItem.payments : [];
+          return { id: requiredId(dbItem && dbItem.id), kind: (dbItem && dbItem.kind === 'hutang') ? 'hutang' : 'piutang', party: sanitizeStr(dbItem && dbItem.party), phone: sanitizeStr(dbItem && dbItem.phone), total: num(dbItem && dbItem.total), date: sanitizeDate(dbItem && dbItem.date, today()), due: sanitizeDate(dbItem && dbItem.due, ''), note: sanitizeStr(dbItem && dbItem.note), payments: pays.map(function (pm) { return { date: sanitizeDate(pm && pm.date, today()), amount: num(pm && pm.amount) }; }) };
+        });
         db = d;
         save(); route(); toast('Data dipulihkan');
       } catch (err) { toast('File cadangan tidak valid'); }
